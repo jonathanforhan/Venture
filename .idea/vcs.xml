@@ -4,5 +4,11 @@
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/extern/glfw" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/extern/glm" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/extern/vulkan-hpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/extern/vulkan-hpp/Vulkan-Headers" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/extern/vulkan-hpp/glfw" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/extern/vulkan-hpp/glm" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/extern/vulkan-hpp/glslang" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/extern/vulkan-hpp/tinyxml2" vcs="Git" />
   </component>
 </project>

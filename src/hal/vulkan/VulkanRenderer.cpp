@@ -3,6 +3,33 @@
 #include <ranges>
 #include "error_handling/Check.hpp"
 
+// -- C Callbacks
+static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+        VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+        VkDebugUtilsMessageTypeFlagsEXT message_type,
+        const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
+        void *user_data
+)
+{
+    switch (message_severity)
+    {
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+            std::cout << "Debug Info -- ";
+            break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+            std::cout << "Debug Verbose -- ";
+            break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+            std::cout << "Debug Warning -- ";
+            break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+            std::cout << "Debug Error -- ";
+            break;
+    }
+    std::cout << callback_data->pMessage << '\n';
+    return false;
+}
+
 using namespace venture::vulkan;
 
 VulkanRenderer::VulkanRenderer()
@@ -17,10 +44,10 @@ VulkanRenderer::VulkanRenderer()
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // TODO
 
     try {
+        create_window(800, 800, "Venture Engine");
         create_instance();
         get_physical_device();
         create_logical_device();
-        create_window(800, 800, "Venture Engine");
     } catch (const std::exception &e) {
         std::cerr << e.what() << std::endl;
         throw e; // unwind stack and crash program
@@ -29,14 +56,14 @@ VulkanRenderer::VulkanRenderer()
 
 VulkanRenderer::~VulkanRenderer()
 {
+    _logical_device.destroy();
+    _instance.destroy();
+
     if (_window)
     {
         glfwDestroyWindow(_window);
     }
     glfwTerminate();
-
-    _logical_device.destroy();
-    _instance.destroy();
 }
 
 void VulkanRenderer::render()
@@ -52,6 +79,9 @@ void VulkanRenderer::create_window(int32_t width, int32_t height, const char *na
 
 void VulkanRenderer::create_instance()
 {
+    if constexpr (_validation_layers_enabled)
+        check(verify_instance_validation_layer_support());
+
     vk::ApplicationInfo app_info = {
             .sType = vk::StructureType::eApplicationInfo,
             .pApplicationName = "Venture Engine",
@@ -65,11 +95,24 @@ void VulkanRenderer::create_instance()
     const char **glfw_exts = glfwGetRequiredInstanceExtensions(&glfw_ext_count);
     check(verify_instance_extension_support(glfw_exts, glfw_ext_count));
 
+    vk::DebugUtilsMessengerCreateInfoEXT debug_create_info = {};
+    void *ici_next = nullptr;
+    uint32_t ici_enabled_layer_count = 0;
+    const char *const *ici_enabled_layer_names = nullptr;
+    if (_validation_layers_enabled)
+    {
+        populate_debug_create_info(&debug_create_info);
+        ici_next = &debug_create_info;
+        ici_enabled_layer_count = _validation_layers.size();
+        ici_enabled_layer_names = _validation_layers.data();
+    }
+
     vk::InstanceCreateInfo inst_create_info = {
             .sType = vk::StructureType::eInstanceCreateInfo,
+            .pNext = ici_next,
             .pApplicationInfo = &app_info,
-            .enabledLayerCount = 0,
-            .ppEnabledLayerNames = nullptr,
+            .enabledLayerCount = ici_enabled_layer_count,
+            .ppEnabledLayerNames = ici_enabled_layer_names,
             .enabledExtensionCount = glfw_ext_count,
             .ppEnabledExtensionNames = glfw_exts,
     };
@@ -142,4 +185,49 @@ bool VulkanRenderer::verify_instance_extension_support(const char **exts, size_t
     }
 
     return true;
+}
+
+bool VulkanRenderer::verify_instance_validation_layer_support()
+{
+    uint32_t layer_count;
+    auto result = vk::enumerateInstanceLayerProperties(&layer_count, nullptr);
+    checkf(result == vk::Result::eSuccess, "enumerate instance layer properties");
+
+    std::vector<vk::LayerProperties> layers(layer_count);
+    result = vk::enumerateInstanceLayerProperties(&layer_count, layers.data());
+    checkf(result == vk::Result::eSuccess, "enumerate instance layer properties");
+
+    for (const char *validation_layer : _validation_layers)
+    {
+        bool found_layer = false;
+
+        for (const auto &layer : layers)
+        {
+            if (std::strcmp(validation_layer, layer.layerName) == 0)
+            {
+                found_layer = true;
+                break;
+            }
+        }
+
+        if (!found_layer)
+            return false;
+    }
+
+    return true;
+}
+
+void VulkanRenderer::populate_debug_create_info(vk::DebugUtilsMessengerCreateInfoEXT *debug_create_info)
+{
+    check(_validation_layers_enabled == true);
+    debug_create_info->sType = vk::StructureType::eDebugUtilsMessengerCreateInfoEXT;
+    debug_create_info->messageSeverity =
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
+    debug_create_info->messageType =
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
+    debug_create_info->pfnUserCallback = debug_callback;
 }

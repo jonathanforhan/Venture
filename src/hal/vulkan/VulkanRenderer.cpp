@@ -37,41 +37,26 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
 using namespace venture::vulkan;
 
 VulkanRenderer::VulkanRenderer()
-        : _window(nullptr),
+        : _window(Window(800, 800, "Venture Engine")),
           _instance(),
+          _surface(),
           _physical_device(),
           _logical_device(),
+          _queue_family_info(),
           _graphics_queue(),
           _presentation_queue(),
-          _surface()
+          _swapchain()
 {
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // TODO
-
     try {
-        create_window(800, 800, "Venture Engine");
         create_instance();
         create_surface();
         get_physical_device();
         create_logical_device();
+        create_swapchain();
     } catch (const std::exception &e) {
         log(Error, e.what());
         throw e; // unwind stack and crash program
     }
-}
-
-VulkanRenderer::~VulkanRenderer()
-{
-    vkDestroySurfaceKHR(_instance, _surface, nullptr);
-    _logical_device.destroy();
-    _instance.destroy();
-
-    if (_window)
-    {
-        glfwDestroyWindow(_window);
-    }
-    glfwTerminate();
 }
 
 void VulkanRenderer::render()
@@ -81,8 +66,7 @@ void VulkanRenderer::render()
 
 void VulkanRenderer::create_window(int32_t width, int32_t height, const char *name)
 {
-    _window = glfwCreateWindow(width, height, name, nullptr, nullptr);
-    checkf(_window != nullptr, "glfw create window");
+    // TODO
 }
 
 void VulkanRenderer::create_instance()
@@ -106,10 +90,6 @@ void VulkanRenderer::create_instance()
     check(verify_instance_extension_support(glfw_exts, glfw_ext_count));
 
     vk::DebugUtilsMessengerCreateInfoEXT debug_create_info = {};
-    void *ici_next;
-    uint32_t ici_enabled_layer_count;
-    const char *const *ici_enabled_layer_names;
-
     if constexpr (_validation_layers_enabled)
     {
         debug_create_info.sType = vk::StructureType::eDebugUtilsMessengerCreateInfoEXT;
@@ -122,16 +102,11 @@ void VulkanRenderer::create_instance()
                 vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
                 vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
         debug_create_info.pfnUserCallback = debug_callback;
-        ici_next = &debug_create_info;
-        ici_enabled_layer_count = _validation_layers.size();
-        ici_enabled_layer_names = _validation_layers.data();
     }
-    else
-    {
-        ici_next = nullptr;
-        ici_enabled_layer_count = 0;
-        ici_enabled_layer_names = nullptr;
-    }
+
+    void *ici_next                    = _validation_layers_enabled ? &debug_create_info        : nullptr;
+    uint32_t ici_enabled_layer_count  = _validation_layers_enabled ? _validation_layers.size() : 0;
+    auto *ici_enabled_layer_names     = _validation_layers_enabled ? _validation_layers.data() : nullptr;
 
     vk::InstanceCreateInfo inst_create_info = {
             .sType = vk::StructureType::eInstanceCreateInfo,
@@ -143,26 +118,23 @@ void VulkanRenderer::create_instance()
             .ppEnabledExtensionNames = glfw_exts,
     };
 
-    vk::Result result = vk::createInstance(&inst_create_info, nullptr, &_instance);
-    checkf(result == vk::Result::eSuccess, "create vulkan instance");
+    _instance = vk::createInstanceUnique(inst_create_info);
 }
 
 void VulkanRenderer::create_surface()
 {
-    auto c_result = glfwCreateWindowSurface(_instance, _window, nullptr, reinterpret_cast<VkSurfaceKHR *>(&_surface));
-    checkf(c_result == VK_SUCCESS, "glfw create window surface");
+    auto result = _window.create_surface_unique(*_instance, &_surface);
+    checkf(result == vk::Result::eSuccess, "glfw create window surface");
 }
 
 void VulkanRenderer::create_logical_device()
 {
-    auto queue_family_info = QueueFamilyInfo::get_info(_physical_device, _surface);
-
-    float priority = 1;
+    float priority = 1.0f;
 
     std::vector<vk::DeviceQueueCreateInfo> dev_queue_create_info_collection;
     std::set<int32_t> queue_family_indices = {
-            queue_family_info.graphics_family_index,
-            queue_family_info.presentation_family_index
+            _queue_family_info.graphics_family_index,
+            _queue_family_info.presentation_family_index
     };
 
     for (auto index : queue_family_indices)
@@ -183,23 +155,67 @@ void VulkanRenderer::create_logical_device()
             .ppEnabledExtensionNames = _device_extensions.data()
     };
 
-    auto result = _physical_device.createDevice(&dev_create_info, nullptr, &_logical_device);
-    checkf(result == vk::Result::eSuccess, "create logical device");
+    _logical_device = _physical_device.createDeviceUnique(dev_create_info);
 
-    _logical_device.getQueue(queue_family_info.graphics_family_index, 0, &_graphics_queue);
-    _logical_device.getQueue(queue_family_info.presentation_family_index, 0, &_presentation_queue);
+    _logical_device->getQueue(_queue_family_info.graphics_family_index, 0, &_graphics_queue);
+    _logical_device->getQueue(_queue_family_info.presentation_family_index, 0, &_presentation_queue);
+}
+
+void VulkanRenderer::create_swapchain()
+{
+    SwapchainInfo swapchain_info = SwapchainInfo::get_info(_physical_device, *_surface);
+    vk::SurfaceFormatKHR surface_format = swapchain_info.optimal_surface_format();
+    vk::PresentModeKHR present_mode = swapchain_info.optimal_present_mode();
+    vk::Extent2D extent = swapchain_info.optimal_swap_extent(&_window);
+
+    uint32_t sci_image_count = swapchain_info.surface_capabilities.minImageCount + 1;
+    if (swapchain_info.surface_capabilities.maxImageCount != 0)
+        sci_image_count = std::min(sci_image_count, swapchain_info.surface_capabilities.maxImageCount);
+
+    uint32_t queue_family_array[] = {
+            (uint32_t)_queue_family_info.graphics_family_index,
+            (uint32_t)_queue_family_info.presentation_family_index
+    };
+
+    bool same_queue = _queue_family_info.graphics_family_index == _queue_family_info.presentation_family_index;
+
+    auto sci_image_sharing_mode       = same_queue ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent;
+    auto sci_queue_family_index_count = same_queue ? uint32_t(0)                 : uint32_t(2);
+    auto *sci_queue_family_indices    = same_queue ? nullptr                     : queue_family_array;
+
+    vk::SwapchainCreateInfoKHR swapchain_create_info = {
+            .sType = vk::StructureType::eSwapchainCreateInfoKHR,
+            .surface = *_surface,
+            .minImageCount = sci_image_count,
+            .imageFormat = surface_format.format,
+            .imageColorSpace = surface_format.colorSpace,
+            .imageExtent = extent,
+            .imageArrayLayers = 1,
+            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+            .imageSharingMode = sci_image_sharing_mode,
+            .queueFamilyIndexCount = sci_queue_family_index_count,
+            .pQueueFamilyIndices = sci_queue_family_indices,
+            .preTransform = swapchain_info.surface_capabilities.currentTransform,
+            .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+            .presentMode = present_mode,
+            .clipped = true,
+            .oldSwapchain = nullptr
+    };
+
+    _swapchain = _logical_device->createSwapchainKHRUnique(swapchain_create_info);
 }
 
 void VulkanRenderer::get_physical_device()
 {
-    std::vector<vk::PhysicalDevice> devs = _instance.enumeratePhysicalDevices();
+    auto devs = _instance->enumeratePhysicalDevices();
     for (const auto &dev : devs)
     {
-        auto queue_family = QueueFamilyInfo::get_info(dev, _surface);
-        if (queue_family.is_valid())
+        auto queue_family_info = QueueFamilyInfo::get_info(dev, *_surface);
+        if (queue_family_info.is_valid())
         {
             check_DEBUG(verify_physical_device_suitable(dev));
             _physical_device = dev;
+            _queue_family_info = queue_family_info;
             return;
         }
     }
@@ -207,15 +223,15 @@ void VulkanRenderer::get_physical_device()
 
 bool VulkanRenderer::verify_instance_extension_support(const char **exts, size_t exts_count)
 {
-    auto ext_props = vk::enumerateInstanceExtensionProperties();
+    auto available_exts = vk::enumerateInstanceExtensionProperties();
 
-    for (uint32_t i : std::views::iota(size_t(0), exts_count))
+    for (size_t i = 0; i < exts_count; i++)
     {
         auto match_ext = [=](vk::ExtensionProperties ext) -> bool {
             return std::strcmp(exts[i], ext.extensionName) == 0;
         };
 
-        if (std::ranges::find_if(ext_props, match_ext) == ext_props.end())
+        if (std::ranges::find_if(available_exts, match_ext) == available_exts.end())
         {
             logf(Error, "instance extension '%s' not supported", exts[i]);
             return false;
@@ -228,7 +244,7 @@ bool VulkanRenderer::verify_instance_extension_support(const char **exts, size_t
 
 bool VulkanRenderer::verify_device_extension_support(vk::PhysicalDevice physical_device)
 {
-    auto dev_ext_props = physical_device.enumerateDeviceExtensionProperties();
+    auto available_exts = physical_device.enumerateDeviceExtensionProperties();
 
     for (const auto &dev_ext : _device_extensions)
     {
@@ -236,7 +252,7 @@ bool VulkanRenderer::verify_device_extension_support(vk::PhysicalDevice physical
             return std::strcmp(dev_ext, ext.extensionName) == 0;
         };
 
-        if (std::ranges::find_if(dev_ext_props, match_ext) == dev_ext_props.end())
+        if (std::ranges::find_if(available_exts, match_ext) == available_exts.end())
         {
             logf(Error, "device extension '%s' not supported", dev_ext);
             return false;
@@ -248,7 +264,7 @@ bool VulkanRenderer::verify_device_extension_support(vk::PhysicalDevice physical
 
 bool VulkanRenderer::verify_instance_validation_layer_support()
 {
-    auto layers = vk::enumerateInstanceLayerProperties();
+    auto available_layers = vk::enumerateInstanceLayerProperties();
 
     for (const char *validation_layer : _validation_layers)
     {
@@ -256,7 +272,7 @@ bool VulkanRenderer::verify_instance_validation_layer_support()
             return std::strcmp(validation_layer, ext.layerName) == 0;
         };
 
-        if (std::ranges::find_if(layers, match_layer) == layers.end())
+        if (std::ranges::find_if(available_layers, match_layer) == available_layers.end())
         {
             logf(Error, "validation layer '%s' not supported", validation_layer);
             return false;
@@ -268,8 +284,8 @@ bool VulkanRenderer::verify_instance_validation_layer_support()
 
 bool VulkanRenderer::verify_physical_device_suitable(vk::PhysicalDevice physical_device)
 {
-    bool queue_family_valid = QueueFamilyInfo::get_info(physical_device, _surface).is_valid();
-    bool swap_chain_valid = SwapChainInfo::get_info(physical_device, _surface).is_valid();
+    bool queue_family_valid = QueueFamilyInfo::get_info(physical_device, *_surface).is_valid();
+    bool swap_chain_valid = SwapchainInfo::get_info(physical_device, *_surface).is_valid();
     bool dev_ext_support = verify_device_extension_support(physical_device);
 
     return queue_family_valid && swap_chain_valid && dev_ext_support;

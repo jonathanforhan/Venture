@@ -2,11 +2,11 @@
 
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS 1
 #include <vulkan/vulkan.hpp>
-#include <GLFW/glfw3.h>
 #include <array>
+#include "Window.hpp"
 #include "../IRenderer.hpp"
 #include "QueueFamilyInfo.hpp"
-#include "SwapChainInfo.hpp"
+#include "SwapchainInfo.hpp"
 
 namespace venture::vulkan {
 
@@ -14,7 +14,6 @@ class VulkanRenderer : IRenderer
 {
 public:
     explicit VulkanRenderer();
-    ~VulkanRenderer();
 
     inline bool should_close() override;
     inline void poll_events() override;
@@ -25,6 +24,7 @@ private:
     void create_instance();
     void create_surface();
     void create_logical_device();
+    void create_swapchain();
 
     void get_physical_device();
 
@@ -34,13 +34,15 @@ private:
     bool verify_physical_device_suitable(vk::PhysicalDevice physical_device);
 
 private:
-    GLFWwindow *_window;
-    vk::Instance _instance;
+    Window _window;
+    vk::UniqueInstance _instance;
+    vk::UniqueSurfaceKHR _surface;
     vk::PhysicalDevice _physical_device;
-    vk::Device _logical_device;
+    vk::UniqueDevice _logical_device;
+    QueueFamilyInfo _queue_family_info;
     vk::Queue _graphics_queue;
     vk::Queue _presentation_queue;
-    vk::SurfaceKHR _surface;
+    vk::UniqueSwapchainKHR _swapchain;
 
     constexpr static std::array<const char *, 1> _validation_layers = {
             "VK_LAYER_KHRONOS_validation",
@@ -58,7 +60,7 @@ private:
 };
 
 //--- Inline Methods
-bool VulkanRenderer::should_close() { return glfwWindowShouldClose(_window); }
+bool VulkanRenderer::should_close() { return _window.should_close(); }
 void VulkanRenderer::poll_events() { glfwPollEvents(); }
 
 } // venture

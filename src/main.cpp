@@ -1,5 +1,5 @@
 #include "Engine.hpp"
-#include <iostream>
+#include "error_handling/Log.hpp"
 
 using namespace venture;
 
@@ -9,7 +9,7 @@ int main()
         Engine engine;
         engine.run();
     } catch (const std::exception &e) {
-        std::cerr << "Exception caught in main FATAL " << e.what() << std::endl;
+        log(Error, "Exception caught in main FATAL " << e.what());
         std::exit(EXIT_FAILURE);
     }
 }

@@ -4,7 +4,7 @@
 
 namespace venture {
 
-#ifdef VENTURE_VULKAN_RENDERER
+#ifdef V_VULKAN_RENDERER
 using Renderer = vulkan::VulkanRenderer;
 #endif
 

@@ -1,9 +1,9 @@
-#include "Window.hpp"
+#include "VulkanWindow.hpp"
 #include "error_handling/Check.hpp"
 
 namespace venture::vulkan {
 
-Window::Window(int32_t width, int32_t height, std::string_view name, bool resizeable)
+VulkanWindow::VulkanWindow(int32_t width, int32_t height, std::string_view name, bool resizeable)
 {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -14,18 +14,17 @@ Window::Window(int32_t width, int32_t height, std::string_view name, bool resize
     checkf(_window != nullptr, "glfw create window");
 }
 
-Window::~Window()
+VulkanWindow::~VulkanWindow()
 {
     glfwDestroyWindow(_window);
     glfwTerminate();
 }
 
-vk::Result Window::create_surface_unique(vk::Instance instance, vk::UniqueSurfaceKHR *surface) noexcept
+vk::UniqueSurfaceKHR VulkanWindow::create_surface_unique(vk::Instance instance)
 {
-    VkSurfaceKHR c_surface;
-    auto result = vk::Result(glfwCreateWindowSurface(instance, _window, nullptr, &c_surface));
-    *surface = vk::UniqueSurfaceKHR(c_surface, instance);
-    return result;
+    VkSurfaceKHR surface;
+    check(glfwCreateWindowSurface(instance, _window, nullptr, &surface) == VK_SUCCESS);
+    return vk::UniqueSurfaceKHR(surface, instance);
 }
 
 } // venture::vulkan

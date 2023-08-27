@@ -2,6 +2,7 @@
 #include <iostream>
 #include <type_traits>
 
+#ifdef V_LOGGING_ENABLED
 namespace venture::detail::logging {
 enum class Info;
 enum class Warning;
@@ -25,41 +26,43 @@ constexpr static bool LOG_ERRORS = false;
 
 namespace venture {
 
-#ifdef V_LOGGING_ENABLED
 #define log(Level, Msg) do {                                                                                           \
-if constexpr (detail::logging::LOG_INFO && std::is_same<detail::logging::Level, detail::logging::Info>::value)         \
+using namespace detail::logging;                                                                                       \
+if constexpr (LOG_INFO && std::is_same<Level, Info>::value)                                                            \
 {                                                                                                                      \
-    std::cout << "Venture Info -- " << Msg << std::endl;                                                               \
+    std::cout << "Venture Info: " << Msg << std::endl;                                                                 \
 }                                                                                                                      \
-else if constexpr (detail::logging::LOG_WARNINGS && std::is_same<detail::logging::Level, detail::logging::Warning>::value)\
+else if constexpr (LOG_WARNINGS && std::is_same<Level, Warning>::value)                                                \
 {                                                                                                                      \
-    std::cout << "Venture Warning -- " << Msg << std::endl;                                                            \
+    std::cout << "Venture Warning: " << Msg << std::endl;                                                              \
 }                                                                                                                      \
-else if constexpr (detail::logging::LOG_ERRORS && std::is_same<detail::logging::Level, detail::logging::Error>::value) \
+else if constexpr (LOG_ERRORS && std::is_same<Level, Error>::value)                                                    \
 {                                                                                                                      \
-    std::cerr << "Venture Error -- " << Msg << std::endl;                                                              \
+    std::cerr << "Venture Error: " << Msg << std::endl;                                                                \
 }                                                                                                                      \
 } while(0)
 
 #define logf(Level, ...) do {                                                                                          \
-if constexpr (detail::logging::LOG_INFO && std::is_same<detail::logging::Level, detail::logging::Info>::value)         \
+using namespace detail::logging;                                                                                       \
+if constexpr (LOG_INFO && std::is_same<Level, Info>::value)                                                            \
 {                                                                                                                      \
-    fprintf(stdout, "Venture Info -- ");                                                                               \
+    fprintf(stdout, "Venture Info: ");                                                                                 \
     fprintf(stdout, __VA_ARGS__);                                                                                      \
 }                                                                                                                      \
-else if constexpr (detail::logging::LOG_WARNINGS && std::is_same<detail::logging::Level, detail::logging::Warning>::value)\
+else if constexpr (LOG_WARNINGS && std::is_same<Level, Warning>::value)                                                \
 {                                                                                                                      \
-    fprintf(stdout, "Venture Warning -- ");                                                                            \
+    fprintf(stdout, "Venture Warning: ");                                                                              \
     fprintf(stdout, __VA_ARGS__);                                                                                      \
 }                                                                                                                      \
-else if constexpr (detail::logging::LOG_ERRORS && std::is_same<detail::logging::Level, detail::logging::Error>::value) \
+else if constexpr (LOG_ERRORS && std::is_same<Level, Error>::value)                                                    \
 {                                                                                                                      \
-    fprintf(stderr, "Venture Error -- ");                                                                              \
+    fprintf(stderr, "Venture Error: ");                                                                                \
     fprintf(stderr, __VA_ARGS__);                                                                                      \
 }                                                                                                                      \
 } while(0)
-#else
+#else // V_LOGGING_ENABLED
 #define log(Level, Msg)
+#define logf(Level, ...)
 #endif
 
 } // venture

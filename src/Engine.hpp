@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hal/Renderer.hpp"
+#include "hal/Window.hpp"
 
 namespace venture {
 
@@ -13,6 +14,7 @@ public:
 private:
 
 private:
+    Window _window;
     Renderer _renderer;
 };
 

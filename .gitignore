@@ -1,1 +1,5 @@
 *build*/**
+*compile*/**
+out/
+bin/
+spirv/

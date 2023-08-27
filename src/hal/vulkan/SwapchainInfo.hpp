@@ -1,33 +1,40 @@
 #pragma once
 
-#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS 1
-#include <vulkan/vulkan.hpp>
-#include <GLFW/glfw3.h>
-#include "Window.hpp"
+#include "VulkanApi.hpp"
+#include "VulkanWindow.hpp"
+#include <optional>
 
 namespace venture::vulkan {
 
 class SwapchainInfo
 {
-    SwapchainInfo() = default;
 public:
     vk::SurfaceCapabilitiesKHR surface_capabilities;
     std::vector<vk::SurfaceFormatKHR> surface_formats;
     std::vector<vk::PresentModeKHR> present_modes;
+    typedef struct {
+        vk::SurfaceFormatKHR surface_format;
+        vk::PresentModeKHR present_mode;
+        vk::Extent2D extent;
+    } optimal_t;
+    // only use optimal values if find_optimal was set to true in get_info
+    std::optional<optimal_t> optimal = std::nullopt;
 
     [[nodiscard]] inline bool is_valid() const;
-    static SwapchainInfo get_info(vk::PhysicalDevice physical_device, vk::SurfaceKHR surface);
+    static SwapchainInfo get_info(
+            vk::PhysicalDevice physical_device, vk::SurfaceKHR surface, VulkanWindow *window, bool find_optimal = true);
 
+private:
     // Prefer
     //     Format       : VK_FORMAT_R8G8B8A8_UNORM
     //     ColorSpace   : VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-    [[nodiscard]] vk::SurfaceFormatKHR optimal_surface_format() const;
+    [[nodiscard]] vk::SurfaceFormatKHR find_optimal_surface_format() const;
 
     // Prefer
     //     Present Mode : VK_PRESENT_MODE_MAILBOX_KHR
-    [[nodiscard]] vk::PresentModeKHR optimal_present_mode() const;
+    [[nodiscard]] vk::PresentModeKHR find_optimal_present_mode() const;
 
-    vk::Extent2D optimal_swap_extent(Window *window) const;
+    vk::Extent2D find_optimal_extent(VulkanWindow *window) const;
 };
 
 bool SwapchainInfo::is_valid() const

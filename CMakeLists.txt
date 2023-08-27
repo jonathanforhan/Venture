@@ -10,6 +10,8 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
 endif()
 
+execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} COMMAND python3 compile_shaders.py)
+
 find_package(Vulkan REQUIRED)
 
 add_subdirectory(extern)
@@ -42,3 +44,5 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
         -DV_LOG_WARNINGS
         -DV_LOG_ERRORS
 )
+
+file(COPY spirv DESTINATION ${CMAKE_BINARY_DIR})

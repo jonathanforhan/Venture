@@ -4,8 +4,11 @@
 
 namespace venture::vulkan {
 
-SwapchainInfo
-SwapchainInfo::get_info(vk::PhysicalDevice physical_device, vk::SurfaceKHR surface, VulkanWindow *window, bool find_optimal)
+SwapchainInfo SwapchainInfo::get_info(
+        vk::PhysicalDevice physical_device,
+        vk::SurfaceKHR surface,
+        const VulkanWindow *window,
+        bool find_optimal)
 {
     SwapchainInfo swap_chain_info;
 
@@ -46,7 +49,7 @@ vk::PresentModeKHR SwapchainInfo::find_optimal_present_mode() const
         : vk::PresentModeKHR::eFifo;
 }
 
-vk::Extent2D SwapchainInfo::find_optimal_extent(VulkanWindow *window) const
+vk::Extent2D SwapchainInfo::find_optimal_extent(const VulkanWindow *window) const
 {
     // if surface width == INT_MAX then window extent can vary else it is window dimensions
     if (surface_capabilities.currentExtent.width == std::numeric_limits<uint32_t>::max())

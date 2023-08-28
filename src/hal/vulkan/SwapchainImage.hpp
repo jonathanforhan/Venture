@@ -4,13 +4,10 @@
 
 namespace venture::vulkan {
 
-class SwapchainImage
+struct SwapchainImage
 {
-public:
     vk::Image image;
     vk::UniqueImageView image_view;
 };
-
-using SwapchainImageCollection = std::vector<SwapchainImage>;
 
 } // venture::vulkan

@@ -13,9 +13,11 @@ public:
     explicit VulkanWindow(int32_t width, int32_t height, std::string_view name = "Venture", bool resizeable = false);
     ~VulkanWindow();
 
-    [[nodiscard]] inline bool should_close() noexcept override;
+    [[nodiscard]]
+    inline bool should_close() noexcept override;
     inline void poll_events() noexcept override;
-    vk::UniqueSurfaceKHR create_surface_unique(vk::Instance instance);
+    [[nodiscard]]
+    vk::UniqueSurfaceKHR create_surface_unique(vk::Instance instance) const;
 
 private:
     GLFWwindow *_window;

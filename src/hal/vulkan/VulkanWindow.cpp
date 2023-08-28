@@ -20,7 +20,7 @@ VulkanWindow::~VulkanWindow()
     glfwTerminate();
 }
 
-vk::UniqueSurfaceKHR VulkanWindow::create_surface_unique(vk::Instance instance)
+vk::UniqueSurfaceKHR VulkanWindow::create_surface_unique(vk::Instance instance) const
 {
     VkSurfaceKHR surface;
     check(glfwCreateWindowSurface(instance, _window, nullptr, &surface) == VK_SUCCESS);

@@ -37,12 +37,12 @@ else ()
     message(FATAL_ERROR "Invalid build config! options are '-DV_DIST | -DV_RELEASE | -DV_DIST'")
 endif ()
 
-target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE -DV_VULKAN_RENDERER)
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE -DV_VULKAN_RENDERER=1)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-        -DV_LOGGING_ENABLED
-        -DV_LOG_INFO
-        -DV_LOG_WARNINGS
-        -DV_LOG_ERRORS
+        -DV_LOGGING_ENABLED=1
+        -DV_LOG_INFO=1
+        -DV_LOG_WARNINGS=1
+        -DV_LOG_ERRORS=1
 )
 
 file(COPY spirv DESTINATION ${CMAKE_BINARY_DIR})

@@ -20,21 +20,30 @@ public:
     // only use optimal values if find_optimal was set to true in get_info
     std::optional<optimal_t> optimal = std::nullopt;
 
-    [[nodiscard]] inline bool is_valid() const;
+    [[nodiscard]]
+    inline bool is_valid() const;
+
+    [[nodiscard]]
     static SwapchainInfo get_info(
-            vk::PhysicalDevice physical_device, vk::SurfaceKHR surface, VulkanWindow *window, bool find_optimal = true);
+            vk::PhysicalDevice physical_device,
+            vk::SurfaceKHR surface,
+            const VulkanWindow *window,
+            bool find_optimal = true);
 
 private:
     // Prefer
     //     Format       : VK_FORMAT_R8G8B8A8_UNORM
     //     ColorSpace   : VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-    [[nodiscard]] vk::SurfaceFormatKHR find_optimal_surface_format() const;
+    [[nodiscard]]
+    vk::SurfaceFormatKHR find_optimal_surface_format() const;
 
     // Prefer
     //     Present Mode : VK_PRESENT_MODE_MAILBOX_KHR
-    [[nodiscard]] vk::PresentModeKHR find_optimal_present_mode() const;
+    [[nodiscard]]
+    vk::PresentModeKHR find_optimal_present_mode() const;
 
-    vk::Extent2D find_optimal_extent(VulkanWindow *window) const;
+    [[nodiscard]]
+    vk::Extent2D find_optimal_extent(const VulkanWindow *window) const;
 };
 
 bool SwapchainInfo::is_valid() const

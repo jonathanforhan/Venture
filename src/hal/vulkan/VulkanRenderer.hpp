@@ -21,18 +21,29 @@ public:
     void render() override;
 
 private:
+    // mutate internal state of renderer
     void create_instance();
     void create_surface();
     void create_logical_device();
     void create_swapchain();
-    vk::UniqueImageView create_image_view(vk::Image image, vk::Format format, vk::ImageAspectFlagBits flags) const;
+    void create_render_pass();
+    void create_graphics_pipeline();
 
-    void get_physical_device();
+    // make objects without mutating renderer
+    [[nodiscard]]
+    vk::UniqueImageView make_image_view(vk::Image image, vk::Format format, vk::ImageAspectFlagBits flags) const;
+    [[nodiscard]]
+    vk::UniqueShaderModule make_shader_module(const char *path) const;
 
-    static bool verify_instance_extension_support(const std::span<const char *> extensions);
+    // assign existing data to internal state, nothing created
+    void retrieve_physical_device();
+
+    // verify, non-mutating
+    static bool verify_instance_extension_support(std::span<const char *> extensions);
     static bool verify_device_extension_support(vk::PhysicalDevice physical_device);
     static bool verify_instance_validation_layer_support();
-    bool verify_physical_device_suitable(vk::PhysicalDevice physical_device);
+    [[nodiscard]]
+    bool verify_physical_device_suitable(vk::PhysicalDevice physical_device) const;
 
 private:
     VulkanWindow *_window;
@@ -45,20 +56,24 @@ private:
     vk::Queue _presentation_queue;
     SwapchainInfo _swapchain_info;
     vk::UniqueSwapchainKHR _swapchain;
-    SwapchainImageCollection _swapchain_images;
+    std::vector<SwapchainImage> _swapchain_images;
+    vk::UniqueRenderPass _render_pass;
+    vk::UniquePipelineLayout _pipeline_layout;
+    vk::UniquePipeline _graphics_pipeline;
 
-    constexpr static std::array<const char *, 1> _validation_layers = {
+    constexpr static const char *VERT_PATH = "../spirv/vert.spv";
+    constexpr static const char *FRAG_PATH = "../spirv/frag.spv";
+    constexpr static std::array<const char *, 1> VALIDATION_LAYERS = {
             "VK_LAYER_KHRONOS_validation",
     };
-
-    constexpr static std::array<const char *, 1> _device_extensions = {
+    constexpr static std::array<const char *, 1> DEVICE_EXTENSIONS = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
 #ifndef V_DIST
-    constexpr static bool _validation_layers_enabled = true;
+    constexpr static bool VALIDATION_LAYERS_ENABLED = true;
 #else
-    constexpr static bool _validation_layers_enabled = false;
+    constexpr static bool VALIDATION_LAYERS_ENABLED = false;
 #endif
 };
 

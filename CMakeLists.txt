@@ -10,7 +10,7 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
 endif()
 
-execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} COMMAND python3 compile_shaders.py)
+execute_process(WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/scripts" COMMAND python3 pre_build.py)
 
 find_package(Vulkan REQUIRED)
 

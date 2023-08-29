@@ -1,5 +1,7 @@
 *build*/**
 *compile*/**
-out/
 bin/
 spirv/
+.vs
+out/
+CMakeSettings.json

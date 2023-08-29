@@ -19,9 +19,11 @@ SwapchainInfo SwapchainInfo::get_info(
 
     if (find_optimal)
     {
-        swap_chain_info.optimal->surface_format = swap_chain_info.find_optimal_surface_format();
-        swap_chain_info.optimal->present_mode = swap_chain_info.find_optimal_present_mode();
-        swap_chain_info.optimal->extent = swap_chain_info.find_optimal_extent(window);
+        swap_chain_info.optimal = {
+            .surface_format = swap_chain_info.find_optimal_surface_format(),
+            .present_mode = swap_chain_info.find_optimal_present_mode(),
+            .extent = swap_chain_info.find_optimal_extent(window),
+        };
     }
 
     return swap_chain_info;

@@ -18,7 +18,7 @@ public:
     /** VulkanRenderer does not own VulkanWindow the Engine does */
     explicit VulkanRenderer(VulkanWindow *window);
 
-    void render() override;
+    void draw() override;
 
 private:
     // mutate internal state of renderer
@@ -28,6 +28,11 @@ private:
     void create_swapchain();
     void create_render_pass();
     void create_graphics_pipeline();
+    void create_framebuffers();
+    void create_graphics_command_pool();
+    void create_command_buffers();
+
+    void record_commands();
 
     // make objects without mutating renderer
     [[nodiscard]]
@@ -46,17 +51,27 @@ private:
     bool verify_physical_device_suitable(vk::PhysicalDevice physical_device) const;
 
 private:
+    //--- Core
     VulkanWindow *_window;
     vk::UniqueInstance _instance;
     vk::UniqueSurfaceKHR _surface;
     vk::PhysicalDevice _physical_device;
     vk::UniqueDevice _logical_device;
+
+    //--- Queue
     QueueFamilyInfo _queue_family_info;
     vk::Queue _graphics_queue;
     vk::Queue _presentation_queue;
+
+    //--- Swapchain
     SwapchainInfo _swapchain_info;
     vk::UniqueSwapchainKHR _swapchain;
     std::vector<SwapchainImage> _swapchain_images;
+    std::vector<vk::UniqueFramebuffer> _swapchain_framebuffers;
+    vk::UniqueCommandPool _command_pool;
+    std::vector<vk::UniqueCommandBuffer> _command_buffers;
+
+    //--- Render Pass
     vk::UniqueRenderPass _render_pass;
     vk::UniquePipelineLayout _pipeline_layout;
     vk::UniquePipeline _graphics_pipeline;

@@ -7,25 +7,15 @@ namespace venture::vulkan {
 SwapchainInfo SwapchainInfo::get_info(
         vk::PhysicalDevice physical_device,
         vk::SurfaceKHR surface,
-        const VulkanWindow *window,
-        bool find_optimal)
+        const VulkanWindow *window)
 {
     SwapchainInfo swap_chain_info;
-
-    auto result = physical_device.getSurfaceCapabilitiesKHR(surface, &swap_chain_info.surface_capabilities);
-    checkf(result == vk::Result::eSuccess, "physical device get surface capabilities");
+    swap_chain_info.surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
     swap_chain_info.surface_formats = physical_device.getSurfaceFormatsKHR(surface);
     swap_chain_info.present_modes = physical_device.getSurfacePresentModesKHR(surface);
-
-    if (find_optimal)
-    {
-        swap_chain_info.optimal = {
-            .surface_format = swap_chain_info.find_optimal_surface_format(),
-            .present_mode = swap_chain_info.find_optimal_present_mode(),
-            .extent = swap_chain_info.find_optimal_extent(window),
-        };
-    }
-
+    swap_chain_info.surface_format = swap_chain_info.find_optimal_surface_format();
+    swap_chain_info.present_mode = swap_chain_info.find_optimal_present_mode();
+    swap_chain_info.extent = swap_chain_info.find_optimal_extent(window);
     return swap_chain_info;
 }
 

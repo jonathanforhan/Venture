@@ -26,6 +26,6 @@ private:
 };
 
 bool VulkanWindow::should_close() noexcept { return glfwWindowShouldClose(_window); }
-void VulkanWindow::poll_events() noexcept { glfwPollEvents(); }
+void VulkanWindow::poll_events() noexcept { glfwWaitEvents(); }
 
 } // venture::vulkan

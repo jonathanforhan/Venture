@@ -7,7 +7,7 @@
 #include "error_handling/Log.hpp"
 #include "Debug.hpp"
 
-using namespace venture::vulkan;
+namespace venture::vulkan {
 
 VulkanRenderer::VulkanRenderer(VulkanWindow *window)
         : _window(window),
@@ -21,6 +21,9 @@ VulkanRenderer::VulkanRenderer(VulkanWindow *window)
           _swapchain_info(),
           _swapchain(),
           _swapchain_images(),
+          _swapchain_framebuffers(),
+          _command_pool(),
+          _command_buffers(),
           _render_pass(),
           _pipeline_layout(),
           _graphics_pipeline()
@@ -33,25 +36,29 @@ VulkanRenderer::VulkanRenderer(VulkanWindow *window)
         create_swapchain();
         create_render_pass();
         create_graphics_pipeline();
+        create_framebuffers();
+        create_graphics_command_pool();
+        create_command_buffers();
+        record_commands();
     } catch (const std::exception &e) {
         log(Error, e.what());
         throw e; // unwind stack and crash program
     }
 }
 
-void VulkanRenderer::render()
+void VulkanRenderer::draw()
 {
-    // TODO
+	// TODO
 }
 
 void VulkanRenderer::create_instance()
 {
-    if constexpr (VALIDATION_LAYERS_ENABLED)
-    {
-        check(verify_instance_validation_layer_support());
-    }
+	if constexpr (VALIDATION_LAYERS_ENABLED)
+	{
+		check(verify_instance_validation_layer_support());
+	}
 
-    vk::ApplicationInfo app_info = {
+	vk::ApplicationInfo app_info = {
             .sType = vk::StructureType::eApplicationInfo,
             .pApplicationName = "Venture Engine",
             .applicationVersion = VK_MAKE_API_VERSION(1, 0, 0, 0),
@@ -62,34 +69,35 @@ void VulkanRenderer::create_instance()
 
     uint32_t glfw_ext_count;
     const char **glfw_exts = glfwGetRequiredInstanceExtensions(&glfw_ext_count);
-    check_DEBUG(verify_instance_extension_support({ glfw_exts, glfw_ext_count }));
+    check_DEBUG(verify_instance_extension_support({glfw_exts, glfw_ext_count}));
 
     static vk::DebugUtilsMessengerCreateInfoEXT debug_create_info = {
-        .sType = vk::StructureType::eDebugUtilsMessengerCreateInfoEXT,
-        .messageSeverity =
-                vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-                vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
-        .messageType =
-                vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-                vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-        .pfnUserCallback = debug_callback,
+            .sType = vk::StructureType::eDebugUtilsMessengerCreateInfoEXT,
+            .messageSeverity =
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
+            .messageType =
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+            .pfnUserCallback = debug_callback,
     };
 
-    void *ici_next                   = VALIDATION_LAYERS_ENABLED ? &debug_create_info : nullptr;
-    uint32_t ici_enabled_layer_count = VALIDATION_LAYERS_ENABLED ? VALIDATION_LAYERS.size() : 0;
+    void *ici_next                   = VALIDATION_LAYERS_ENABLED ? &debug_create_info       : nullptr;
+    size_t ici_enabled_layer_count   = VALIDATION_LAYERS_ENABLED ? VALIDATION_LAYERS.size() : 0U;
     auto *ici_enabled_layer_names    = VALIDATION_LAYERS_ENABLED ? VALIDATION_LAYERS.data() : nullptr;
 
-    _instance = vk::createInstanceUnique({
-            .sType = vk::StructureType::eInstanceCreateInfo,
-            .pNext = ici_next,
-            .pApplicationInfo = &app_info,
-            .enabledLayerCount = ici_enabled_layer_count,
-            .ppEnabledLayerNames = ici_enabled_layer_names,
-            .enabledExtensionCount = glfw_ext_count,
-            .ppEnabledExtensionNames = glfw_exts,
-    });
+    vk::InstanceCreateInfo instance_create_info = {
+			.sType = vk::StructureType::eInstanceCreateInfo,
+			.pNext = ici_next,
+			.pApplicationInfo = &app_info,
+			.enabledLayerCount = static_cast<uint32_t>(ici_enabled_layer_count),
+			.ppEnabledLayerNames = ici_enabled_layer_names,
+			.enabledExtensionCount = glfw_ext_count,
+			.ppEnabledExtensionNames = glfw_exts,
+    };
+    _instance = vk::createInstanceUnique(instance_create_info);
 }
 
 void VulkanRenderer::create_surface()
@@ -109,21 +117,25 @@ void VulkanRenderer::create_logical_device()
 
     for (auto index : queue_family_indices)
     {
-        dev_queue_create_info_collection.emplace_back(vk::DeviceQueueCreateInfo {
-                .sType = vk::StructureType::eDeviceQueueCreateInfo,
-                .queueFamilyIndex = static_cast<uint32_t>(index),
-                .queueCount = 1,
-                .pQueuePriorities = &priority,
-        });
+        vk::DeviceQueueCreateInfo device_queue_create_info = {
+				.sType = vk::StructureType::eDeviceQueueCreateInfo,
+				.queueFamilyIndex = static_cast<uint32_t>(index),
+				.queueCount = 1,
+				.pQueuePriorities = &priority,
+        };
+        
+        dev_queue_create_info_collection.emplace_back(device_queue_create_info);
     }
 
-    _logical_device = _physical_device.createDeviceUnique({
+    vk::DeviceCreateInfo device_create_info = {
             .sType = vk::StructureType::eDeviceCreateInfo,
             .queueCreateInfoCount = static_cast<uint32_t>(dev_queue_create_info_collection.size()),
             .pQueueCreateInfos = dev_queue_create_info_collection.data(),
             .enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size()),
             .ppEnabledExtensionNames = DEVICE_EXTENSIONS.data()
-    });
+    };
+
+    _logical_device = _physical_device.createDeviceUnique(device_create_info);
 
     _logical_device->getQueue(_queue_family_info.graphics_family_index, 0, &_graphics_queue);
     _logical_device->getQueue(_queue_family_info.presentation_family_index, 0, &_presentation_queue);
@@ -140,8 +152,8 @@ void VulkanRenderer::create_swapchain()
     }
 
     uint32_t queue_family_array[] = {
-            (uint32_t)_queue_family_info.graphics_family_index,
-            (uint32_t)_queue_family_info.presentation_family_index
+            (uint32_t) _queue_family_info.graphics_family_index,
+            (uint32_t) _queue_family_info.presentation_family_index
     };
 
     bool same_queue = _queue_family_info.graphics_family_index == _queue_family_info.presentation_family_index;
@@ -150,38 +162,39 @@ void VulkanRenderer::create_swapchain()
     auto sci_queue_family_index_count = same_queue ? uint32_t(0)                 : uint32_t(2);
     auto *sci_queue_family_indices    = same_queue ? nullptr                     : queue_family_array;
 
-    _swapchain = _logical_device->createSwapchainKHRUnique({
-            .sType = vk::StructureType::eSwapchainCreateInfoKHR,
-            .surface = *_surface,
-            .minImageCount = sci_image_count,
-            .imageFormat = _swapchain_info.optimal->surface_format.format,
-            .imageColorSpace = _swapchain_info.optimal->surface_format.colorSpace,
-            .imageExtent = _swapchain_info.optimal->extent,
-            .imageArrayLayers = 1,
-            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
-            .imageSharingMode = sci_image_sharing_mode,
-            .queueFamilyIndexCount = sci_queue_family_index_count,
-            .pQueueFamilyIndices = sci_queue_family_indices,
-            .preTransform = _swapchain_info.surface_capabilities.currentTransform,
-            .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-            .presentMode = _swapchain_info.optimal->present_mode,
-            .clipped = true,
-            .oldSwapchain = nullptr
-    });
+    vk::SwapchainCreateInfoKHR swapchain_create_info {
+			.sType = vk::StructureType::eSwapchainCreateInfoKHR,
+			.surface = *_surface,
+			.minImageCount = sci_image_count,
+			.imageFormat = _swapchain_info.surface_format.format,
+			.imageColorSpace = _swapchain_info.surface_format.colorSpace,
+			.imageExtent = _swapchain_info.extent,
+			.imageArrayLayers = 1,
+			.imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+			.imageSharingMode = sci_image_sharing_mode,
+			.queueFamilyIndexCount = sci_queue_family_index_count,
+			.pQueueFamilyIndices = sci_queue_family_indices,
+			.preTransform = _swapchain_info.surface_capabilities.currentTransform,
+			.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+			.presentMode = _swapchain_info.present_mode,
+			.clipped = true,
+			.oldSwapchain = nullptr
+    };
+
+    _swapchain = _logical_device->createSwapchainKHRUnique(swapchain_create_info);
 
     auto images = _logical_device->getSwapchainImagesKHR(*_swapchain);
-    for (const auto image : images)
-    {
-        auto image_view = make_image_view(
-                image, _swapchain_info.optimal->surface_format.format, vk::ImageAspectFlagBits::eColor);
-        _swapchain_images.emplace_back(image, std::move(image_view));
+	for (const auto& image : images)
+	{
+		auto img_view = make_image_view(image, _swapchain_info.surface_format.format, vk::ImageAspectFlagBits::eColor);
+        _swapchain_images.emplace_back(image, std::move(img_view));
     }
 }
 
 void VulkanRenderer::create_render_pass()
 {
     vk::AttachmentDescription color_attachment_desc = {
-            .format = _swapchain_info.optimal->surface_format.format,
+            .format = _swapchain_info.surface_format.format,
             .samples = vk::SampleCountFlagBits::e1,
             .loadOp = vk::AttachmentLoadOp::eClear,
             .storeOp = vk::AttachmentStoreOp::eStore,
@@ -206,32 +219,34 @@ void VulkanRenderer::create_render_pass()
     vk::SubpassDependency subpass_dependencies[2];
     // vk::ImageLayout::eUndefined => vk::ImageLayout::eColorAttachmentOptimal
     subpass_dependencies[0] = vk::SubpassDependency {
-            .srcSubpass = VK_SUBPASS_EXTERNAL,
-            .dstSubpass = 0,
-            .srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe,
-            .dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
-            .srcAccessMask = vk::AccessFlagBits::eMemoryRead,
-            .dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,
+			.srcSubpass = vk::SubpassExternal,
+			.dstSubpass = 0,
+			.srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe,
+			.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			.srcAccessMask = vk::AccessFlagBits::eMemoryRead,
+			.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,
     };
     // vk::ImageLayout::eColorAttachmentOptimal => vk::ImageLayout::ePresentSrcKHR,
     subpass_dependencies[1] = vk::SubpassDependency {
-            .srcSubpass = 0,
-            .dstSubpass = VK_SUBPASS_EXTERNAL,
-            .srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
-            .dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe,
-            .srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,
-            .dstAccessMask = vk::AccessFlagBits::eMemoryRead,
+			.srcSubpass = 0,
+			.dstSubpass = vk::SubpassExternal,
+			.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			.dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe,
+			.srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,
+			.dstAccessMask = vk::AccessFlagBits::eMemoryRead,
     };
 
-    _render_pass = _logical_device->createRenderPassUnique({
-            .sType = vk::StructureType::eRenderPassCreateInfo,
-            .attachmentCount = 1,
-            .pAttachments = &color_attachment_desc,
-            .subpassCount = 1,
-            .pSubpasses = &subpass_desc,
-            .dependencyCount = sizeof subpass_dependencies / sizeof *subpass_dependencies,
-            .pDependencies = subpass_dependencies,
-    });
+    vk::RenderPassCreateInfo render_pass_create_info = {
+			.sType = vk::StructureType::eRenderPassCreateInfo,
+			.attachmentCount = 1,
+			.pAttachments = &color_attachment_desc,
+			.subpassCount = 1,
+			.pSubpasses = &subpass_desc,
+			.dependencyCount = sizeof subpass_dependencies / sizeof *subpass_dependencies,
+			.pDependencies = subpass_dependencies,
+    };
+
+    _render_pass = _logical_device->createRenderPassUnique(render_pass_create_info);
 }
 
 void VulkanRenderer::create_graphics_pipeline()
@@ -280,15 +295,15 @@ void VulkanRenderer::create_graphics_pipeline()
     vk::Viewport viewport = {
             .x = 0.0f,
             .y = 0.0f,
-            .width = static_cast<float>(_swapchain_info.optimal->extent.width),
-            .height = static_cast<float>(_swapchain_info.optimal->extent.height),
+            .width = static_cast<float>(_swapchain_info.extent.width),
+            .height = static_cast<float>(_swapchain_info.extent.height),
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
     };
 
     vk::Rect2D scissor = {
-            .offset = { 0, 0 },
-            .extent = _swapchain_info.optimal->extent
+            .offset = {0, 0},
+            .extent = _swapchain_info.extent
     };
 
     vk::PipelineViewportStateCreateInfo viewport_state_create_info = {
@@ -332,10 +347,10 @@ void VulkanRenderer::create_graphics_pipeline()
             .dstAlphaBlendFactor = vk::BlendFactor::eZero,
             .alphaBlendOp = vk::BlendOp::eAdd,
             .colorWriteMask =
-                vk::ColorComponentFlagBits::eR |
-                vk::ColorComponentFlagBits::eG |
-                vk::ColorComponentFlagBits::eB |
-                vk::ColorComponentFlagBits::eA,
+            vk::ColorComponentFlagBits::eR |
+            vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB |
+            vk::ColorComponentFlagBits::eA,
     };
 
     vk::PipelineColorBlendStateCreateInfo color_blend_state_create_info = {
@@ -360,14 +375,16 @@ void VulkanRenderer::create_graphics_pipeline()
     */
 
     //--- Pipeline Layout
-    _pipeline_layout = _logical_device->createPipelineLayoutUnique({
-            .sType = vk::StructureType::ePipelineLayoutCreateInfo,
-            // TODO
-            .setLayoutCount = 0,
-            .pSetLayouts = nullptr,
-            .pushConstantRangeCount = 0,
-            .pPushConstantRanges = nullptr
-    });
+	vk::PipelineLayoutCreateInfo pipeline_layout_create_info = {
+			.sType = vk::StructureType::ePipelineLayoutCreateInfo,
+			// TODO
+			.setLayoutCount = 0,
+			.pSetLayouts = nullptr,
+			.pushConstantRangeCount = 0,
+			.pPushConstantRanges = nullptr
+	};
+
+    _pipeline_layout = _logical_device->createPipelineLayoutUnique(pipeline_layout_create_info);
 
 
     //--- Graphics Pipeline
@@ -390,15 +407,101 @@ void VulkanRenderer::create_graphics_pipeline()
             .basePipelineIndex = -1,
     };
 
-    auto result = _logical_device->createGraphicsPipelineUnique(VK_NULL_HANDLE, graphics_pipeline_create_info);
-    check(result.result == vk::Result::eSuccess);
-    _graphics_pipeline = std::move(result.value);
+    auto [result, value] = _logical_device->createGraphicsPipelineUnique(VK_NULL_HANDLE, graphics_pipeline_create_info);
+    check(result == vk::Result::eSuccess);
+    _graphics_pipeline = std::move(value);
+}
+
+void VulkanRenderer::create_framebuffers()
+{
+    _swapchain_framebuffers.resize(_swapchain_images.size());
+
+    for (auto i : std::views::iota(0UL, _swapchain_images.size()))
+    {
+		std::array<vk::ImageView, 1> attachments = {
+				*_swapchain_images[i].image_view
+		};
+
+		vk::FramebufferCreateInfo frame_buffer_create_info = {
+				.sType = vk::StructureType::eFramebufferCreateInfo,
+				.renderPass = *_render_pass,
+				.attachmentCount = static_cast<uint32_t>(attachments.size()),
+				.pAttachments = attachments.data(),
+				.width = _swapchain_info.extent.width,
+				.height = _swapchain_info.extent.height,
+				.layers = 1,
+		};
+
+		_swapchain_framebuffers[i] = _logical_device->createFramebufferUnique(frame_buffer_create_info);
+	}
+}
+
+void VulkanRenderer::create_graphics_command_pool()
+{   
+	vk::CommandPoolCreateInfo command_pool_create_info = {
+			.sType = vk::StructureType::eCommandPoolCreateInfo,
+			.queueFamilyIndex = static_cast<uint32_t>(_queue_family_info.graphics_family_index),
+	};
+
+	_command_pool = _logical_device->createCommandPoolUnique(command_pool_create_info);
+}
+
+void VulkanRenderer::create_command_buffers()
+{
+    _command_buffers.resize(_swapchain_framebuffers.size());
+
+    vk::CommandBufferAllocateInfo command_buffer_alloc_info = {
+			.sType = vk::StructureType::eCommandBufferAllocateInfo,
+			.commandPool = *_command_pool,
+			.level = vk::CommandBufferLevel::ePrimary,
+			.commandBufferCount = static_cast<uint32_t>(_command_buffers.size()),
+    };
+
+    _command_buffers = _logical_device->allocateCommandBuffersUnique(command_buffer_alloc_info);
+}
+
+void VulkanRenderer::record_commands()
+{
+    vk::CommandBufferBeginInfo command_buffer_begin_info = {
+            .sType = vk::StructureType::eCommandBufferBeginInfo,
+            .flags = vk::CommandBufferUsageFlagBits::eSimultaneousUse,
+    };
+
+    vk::ClearValue clear_values[] = {
+            vk::ClearColorValue(0.5f, 0.6f, 0.4f, 1.0f)
+    };
+
+    vk::RenderPassBeginInfo render_pass_begin_info = {
+            .sType = vk::StructureType::eRenderPassBeginInfo,
+            .renderPass = *_render_pass,
+            .renderArea = {
+                    .offset = { 0, 0 },
+                    .extent = _swapchain_info.extent,
+            },
+            .clearValueCount = sizeof clear_values / sizeof *clear_values,
+            .pClearValues = clear_values,
+    };
+
+    for (size_t i = 0; i < _command_buffers.size(); i++)
+    {
+        _command_buffers[i]->begin(command_buffer_begin_info);
+
+        render_pass_begin_info.framebuffer = *_swapchain_framebuffers[i];
+		_command_buffers[i]->beginRenderPass(render_pass_begin_info, vk::SubpassContents::eInline);
+        // Render Pass
+			_command_buffers[i]->bindPipeline(vk::PipelineBindPoint::eGraphics, *_graphics_pipeline);
+			_command_buffers[i]->draw(3, 1, 0, 0);
+
+		_command_buffers[i]->endRenderPass();
+
+        _command_buffers[i]->end();
+    }
 }
 
 vk::UniqueImageView
 VulkanRenderer::make_image_view(vk::Image image, vk::Format format, vk::ImageAspectFlagBits flags) const
 {
-    return _logical_device->createImageViewUnique({
+    vk::ImageViewCreateInfo image_view_create_info = {
             .sType = vk::StructureType::eImageViewCreateInfo,
             .image = image,
             .viewType = vk::ImageViewType::e2D,
@@ -416,20 +519,23 @@ VulkanRenderer::make_image_view(vk::Image image, vk::Format format, vk::ImageAsp
                     .baseArrayLayer = 0,
                     .layerCount = 1,
             },
-    });
+    };
+    return _logical_device->createImageViewUnique(image_view_create_info);
 }
 
 vk::UniqueShaderModule VulkanRenderer::make_shader_module(const char *path) const
 {
-    std::ifstream ifs(path, std::ios::binary);
-    check(ifs.is_open());
+    std::ifstream ifs(path, std::ios::binary); // raii
+    check_DEBUG(ifs.is_open());
     auto code = std::vector<char>(std::istreambuf_iterator<char>(ifs), {});
 
-    return _logical_device->createShaderModuleUnique({
-        .sType = vk::StructureType::eShaderModuleCreateInfo,
-        .codeSize = code.size(),
-        .pCode = reinterpret_cast<const uint32_t *>(code.data()),
-    });
+    vk::ShaderModuleCreateInfo shader_module_create_info = {
+            .sType = vk::StructureType::eShaderModuleCreateInfo,
+            .codeSize = code.size(),
+            .pCode = reinterpret_cast<const uint32_t *>(code.data()),
+    };
+
+    return _logical_device->createShaderModuleUnique(shader_module_create_info);
 }
 
 void VulkanRenderer::retrieve_physical_device()
@@ -454,7 +560,7 @@ bool VulkanRenderer::verify_instance_extension_support(const std::span<const cha
 
     for (const auto ext : extensions)
     {
-        auto match_ext = [=](auto prop) -> bool {
+        auto match_ext = [=](vk::ExtensionProperties prop) -> bool {
             return std::strcmp(ext, prop.extensionName) == 0;
         };
 
@@ -516,3 +622,5 @@ bool VulkanRenderer::verify_physical_device_suitable(vk::PhysicalDevice physical
 
     return queue_family_valid && swap_chain_valid && dev_ext_support;
 }
+
+} // venture::vulkan

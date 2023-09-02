@@ -9,16 +9,21 @@ namespace venture::vulkan {
 class SwapchainInfo
 {
 public:
+	SwapchainInfo()
+		: surface_capabilities(),
+		  surface_formats(),
+	      present_modes(),
+		  surface_format(),
+          present_mode(vk::PresentModeKHR::eMailbox),
+		  extent()
+	{}
+
     vk::SurfaceCapabilitiesKHR surface_capabilities;
     std::vector<vk::SurfaceFormatKHR> surface_formats;
     std::vector<vk::PresentModeKHR> present_modes;
-    typedef struct {
-        vk::SurfaceFormatKHR surface_format;
-        vk::PresentModeKHR present_mode;
-        vk::Extent2D extent;
-    } optimal_t;
-    // only use optimal values if find_optimal was set to true in get_info
-    std::optional<optimal_t> optimal = std::nullopt;
+    vk::SurfaceFormatKHR surface_format;
+    vk::PresentModeKHR present_mode;
+    vk::Extent2D extent;
 
     [[nodiscard]]
     inline bool is_valid() const;
@@ -27,8 +32,7 @@ public:
     static SwapchainInfo get_info(
             vk::PhysicalDevice physical_device,
             vk::SurfaceKHR surface,
-            const VulkanWindow *window,
-            bool find_optimal = true);
+            const VulkanWindow *window);
 
 private:
     // Prefer

@@ -5,7 +5,7 @@ namespace venture {
 class IRenderer
 {
 public:
-    virtual void render() = 0;
+    virtual void draw() = 0;
 };
 
 } // venture

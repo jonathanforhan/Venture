@@ -4,7 +4,7 @@ namespace venture {
 
 Engine::Engine()
         : _window(800, 600),
-          _renderer(Renderer(&_window))
+          _renderer(&_window)
 {
     bool static exists = false;
     if (!exists) exists = true; else throw std::runtime_error("Multiple instances of Engine");
@@ -15,7 +15,7 @@ void Engine::run()
     while (!_window.should_close())
     {
         _window.poll_events();
-        _renderer.render();
+        _renderer.draw();
     }
 }
 

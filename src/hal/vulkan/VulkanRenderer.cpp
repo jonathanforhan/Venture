@@ -1,6 +1,5 @@
 #include "VulkanRenderer.hpp"
 #include <fstream>
-#include <iostream>
 #include <ranges>
 #include <set>
 #include "error_handling/Check.hpp"
@@ -9,24 +8,8 @@
 
 namespace venture::vulkan {
 
-VulkanRenderer::VulkanRenderer(VulkanWindow *window)
-        : _window(window),
-          _instance(),
-          _surface(),
-          _physical_device(),
-          _logical_device(),
-          _queue_family_info(),
-          _graphics_queue(),
-          _presentation_queue(),
-          _swapchain_info(),
-          _swapchain(),
-          _swapchain_images(),
-          _swapchain_framebuffers(),
-          _command_pool(),
-          _command_buffers(),
-          _render_pass(),
-          _pipeline_layout(),
-          _graphics_pipeline()
+VulkanRenderer::VulkanRenderer(VulkanWindow *window) : IRenderer(window)
+// no member initializer because all members are POD or require create functions
 {
     try {
         create_instance();
@@ -40,15 +23,63 @@ VulkanRenderer::VulkanRenderer(VulkanWindow *window)
         create_graphics_command_pool();
         create_command_buffers();
         record_commands();
+        create_synchronization();
     } catch (const std::exception &e) {
         log(Error, e.what());
         throw e; // unwind stack and crash program
     }
 }
 
+VulkanRenderer::~VulkanRenderer()
+{
+    _logical_device->waitIdle();
+}
+
 void VulkanRenderer::draw()
 {
-	// TODO
+    //--- Get Next Image
+    constexpr uint32_t timeout = UINT32_MAX;
+
+    auto result = _logical_device->waitForFences(*_draw_fences[_frame_counter], true, timeout);
+    check(result == vk::Result::eSuccess);
+    _logical_device->resetFences(*_draw_fences[_frame_counter]);
+
+    auto [res, image_index] = _logical_device->acquireNextImageKHR(*_swapchain, timeout, *_draw_locks[_frame_counter], VK_NULL_HANDLE);
+    check(res == vk::Result::eSuccess);
+
+    //--- Draw to Image
+    vk::PipelineStageFlags wait_stages[] = {
+            vk::PipelineStageFlagBits::eColorAttachmentOutput,
+    };
+
+    vk::SubmitInfo submit_info = {
+            .sType = vk::StructureType::eSubmitInfo,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &_draw_locks[_frame_counter].get(),
+            .pWaitDstStageMask = wait_stages,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &_command_buffers[image_index].get(),
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &_present_locks[_frame_counter].get(),
+    };
+
+    _graphics_queue.submit(submit_info, *_draw_fences[_frame_counter]);
+
+    //--- Present Image
+    vk::PresentInfoKHR present_info = {
+            .sType = vk::StructureType::ePresentInfoKHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &_present_locks[_frame_counter].get(),
+            .swapchainCount = 1,
+            .pSwapchains = &_swapchain.get(),
+            .pImageIndices = &image_index,
+    };
+
+    result = _presentation_queue.presentKHR(present_info);
+    check(result == vk::Result::eSuccess);
+
+    // loop frames 0 to MAX_FRAME_DRAWS
+    _frame_counter = (_frame_counter + 1) % MAX_FRAME_DRAWS;
 }
 
 void VulkanRenderer::create_instance()
@@ -414,9 +445,9 @@ void VulkanRenderer::create_graphics_pipeline()
 
 void VulkanRenderer::create_framebuffers()
 {
-    _swapchain_framebuffers.resize(_swapchain_images.size());
+    _swapchain_framebuffers.reserve(_swapchain_images.size());
 
-    for (auto i : std::views::iota(0UL, _swapchain_images.size()))
+    for (auto i : std::views::iota(0U, _swapchain_images.size()))
     {
 		std::array<vk::ImageView, 1> attachments = {
 				*_swapchain_images[i].image_view
@@ -432,7 +463,7 @@ void VulkanRenderer::create_framebuffers()
 				.layers = 1,
 		};
 
-		_swapchain_framebuffers[i] = _logical_device->createFramebufferUnique(frame_buffer_create_info);
+		_swapchain_framebuffers.emplace_back(_logical_device->createFramebufferUnique(frame_buffer_create_info));
 	}
 }
 
@@ -448,23 +479,39 @@ void VulkanRenderer::create_graphics_command_pool()
 
 void VulkanRenderer::create_command_buffers()
 {
-    _command_buffers.resize(_swapchain_framebuffers.size());
-
     vk::CommandBufferAllocateInfo command_buffer_alloc_info = {
 			.sType = vk::StructureType::eCommandBufferAllocateInfo,
 			.commandPool = *_command_pool,
 			.level = vk::CommandBufferLevel::ePrimary,
-			.commandBufferCount = static_cast<uint32_t>(_command_buffers.size()),
+			.commandBufferCount = static_cast<uint32_t>(_swapchain_framebuffers.size()),
     };
 
     _command_buffers = _logical_device->allocateCommandBuffersUnique(command_buffer_alloc_info);
+}
+
+void VulkanRenderer::create_synchronization()
+{
+    vk::SemaphoreCreateInfo semaphore_create_info = {
+            .sType = vk::StructureType::eSemaphoreCreateInfo,
+    };
+
+    vk::FenceCreateInfo fence_create_info = {
+            .sType = vk::StructureType::eFenceCreateInfo,
+            .flags = vk::FenceCreateFlagBits::eSignaled,
+    };
+
+    for ([[maybe_unused]] auto _ : std::views::iota(0U, MAX_FRAME_DRAWS))
+	{
+		_draw_locks.emplace_back(_logical_device->createSemaphoreUnique(semaphore_create_info));
+		_present_locks.emplace_back(_logical_device->createSemaphoreUnique(semaphore_create_info));
+        _draw_fences.emplace_back(_logical_device->createFenceUnique(fence_create_info));
+	}
 }
 
 void VulkanRenderer::record_commands()
 {
     vk::CommandBufferBeginInfo command_buffer_begin_info = {
             .sType = vk::StructureType::eCommandBufferBeginInfo,
-            .flags = vk::CommandBufferUsageFlagBits::eSimultaneousUse,
     };
 
     vk::ClearValue clear_values[] = {
@@ -489,8 +536,10 @@ void VulkanRenderer::record_commands()
         render_pass_begin_info.framebuffer = *_swapchain_framebuffers[i];
 		_command_buffers[i]->beginRenderPass(render_pass_begin_info, vk::SubpassContents::eInline);
         // Render Pass
+        {
 			_command_buffers[i]->bindPipeline(vk::PipelineBindPoint::eGraphics, *_graphics_pipeline);
 			_command_buffers[i]->draw(3, 1, 0, 0);
+        }
 
 		_command_buffers[i]->endRenderPass();
 

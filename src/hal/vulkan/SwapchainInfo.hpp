@@ -2,7 +2,6 @@
 
 #include "VulkanApi.hpp"
 #include "VulkanWindow.hpp"
-#include <optional>
 
 namespace venture::vulkan {
 

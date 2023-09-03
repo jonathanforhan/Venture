@@ -14,9 +14,9 @@ namespace venture::vulkan {
 class VulkanRenderer : IRenderer
 {
 public:
-    VulkanRenderer() = delete;
     /** VulkanRenderer does not own VulkanWindow the Engine does */
     explicit VulkanRenderer(VulkanWindow *window);
+    ~VulkanRenderer();
 
     void draw() override;
 
@@ -31,6 +31,7 @@ private:
     void create_framebuffers();
     void create_graphics_command_pool();
     void create_command_buffers();
+    void create_synchronization();
 
     void record_commands();
 
@@ -52,7 +53,6 @@ private:
 
 private:
     //--- Core
-    VulkanWindow *_window;
     vk::UniqueInstance _instance;
     vk::UniqueSurfaceKHR _surface;
     vk::PhysicalDevice _physical_device;
@@ -76,6 +76,13 @@ private:
     vk::UniquePipelineLayout _pipeline_layout;
     vk::UniquePipeline _graphics_pipeline;
 
+    //--- Synchronization
+    std::vector<vk::UniqueSemaphore> _draw_locks;
+    std::vector<vk::UniqueSemaphore> _present_locks;
+    std::vector<vk::UniqueFence> _draw_fences;
+    int32_t _frame_counter = 0;
+
+    constexpr static uint32_t MAX_FRAME_DRAWS = 2; // zero indexed so 2 is 3
     constexpr static const char *VERT_PATH = "../spirv/vert.spv";
     constexpr static const char *FRAG_PATH = "../spirv/frag.spv";
     constexpr static std::array<const char *, 1> VALIDATION_LAYERS = {

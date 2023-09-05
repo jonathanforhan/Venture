@@ -1,9 +1,7 @@
 set(GLFW_BUILD_EXAMPLES OFF)
 set(GLFW_BUILD_TESTS    OFF)
 add_subdirectory(glfw)
-add_subdirectory(glm)
 
-if (BUILD_VULKAN_HPP)
-    message("Building Vulkan-hpp")
-    add_subdirectory(vulkan-hpp)
-endif ()
+set(CGLM_SHARED OFF)
+set(CGLM_STATIC ON)
+add_subdirectory(cglm EXCLUDE_FROM_ALL)

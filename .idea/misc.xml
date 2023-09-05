@@ -2,11 +2,12 @@
 <project version="4">
   <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
   <component name="CidrRootsConfiguration">
+    <libraryRoots>
+      <file path="$PROJECT_DIR$/extern/cglm" />
+      <file path="$PROJECT_DIR$/extern/glfw" />
+    </libraryRoots>
     <excludeRoots>
-      <file path="$PROJECT_DIR$/extern/vulkan-hpp/RAII_Samples" />
-      <file path="$PROJECT_DIR$/extern/vulkan-hpp/glfw" />
-      <file path="$PROJECT_DIR$/extern/vulkan-hpp/glm" />
-      <file path="$PROJECT_DIR$/extern/vulkan-hpp/tinyxml2" />
+      <file path="$PROJECT_DIR$/out" />
     </excludeRoots>
   </component>
 </project>

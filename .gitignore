@@ -3,4 +3,5 @@
 bin/
 spirv/
 .vs
+.idea
 out/

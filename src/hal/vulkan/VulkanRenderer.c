@@ -4,6 +4,7 @@
 #include <assert.h>
 #include "VulkanRenderer.h"
 #include "HLog.h"
+#include "HMath.h"
 
 #ifdef H_DIST
 #define VALIDATION_LAYERS_ENABLED 0
@@ -29,7 +30,7 @@ static const char *DEVICE_EXTENSIONS[] = {
  * 2 - create glfw window surface
  * 3 - find suitable physical device to support our extensions and surface ie the GPU
  * 4 - create logical device, this is where we find out graphics and present queue family indices
- * 5 - create swapchain and choose optimal format, mode, and extent
+ * 5 - create swapchain and choose optimal format, mode, and extent. Setup images and image views
  */
 
 //--- Forward Declaration
@@ -73,12 +74,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
         const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
         void *user_data);
 
-//--- Helper
-static uint32_t clamp(uint32_t d, uint32_t min, uint32_t max) {
-    const uint32_t t = d < min ? min : d;
-    return t > max ? max : t;
-}
-
 //--- Methods
 
 HResult VulkanRenderer_create(VulkanRenderer *vk_renderer, VulkanWindow *vk_window)
@@ -109,6 +104,10 @@ HResult VulkanRenderer_create(VulkanRenderer *vk_renderer, VulkanWindow *vk_wind
 
     return HResult_OK;
 
+    // for (int32_t i = 0; i < vk_renderer->swapchain_image_count; i++)
+    //     vkDestroyImageView(vk_renderer->logical_device, vk_renderer->swapchain_images[i].image_view, NULL);
+    //
+    // free(vk_renderer->swapchain_images);
     // vkDestroySwapchainKHR(vk_renderer->logical_device, vk_renderer->swapchain, NULL);
 abort_swapchain:
     vkDestroyDevice(vk_renderer->logical_device, NULL);
@@ -124,6 +123,10 @@ abort_instance:
 
 void VulkanRenderer_destroy(VulkanRenderer *vk_renderer)
 {
+    for (int32_t i = 0; i < vk_renderer->swapchain_image_count; i++)
+        vkDestroyImageView(vk_renderer->logical_device, vk_renderer->swapchain_images[i].image_view, NULL);
+
+    free(vk_renderer->swapchain_images);
     vkDestroySwapchainKHR(vk_renderer->logical_device, vk_renderer->swapchain, NULL);
     vkDestroyDevice(vk_renderer->logical_device, NULL);
     vkDestroySurfaceKHR(vk_renderer->instance, vk_renderer->surface, NULL);
@@ -209,13 +212,13 @@ static VkResult create_logical_device(VulkanRenderer *vk_renderer)
             vk_renderer->presentation_family.index
     };
 
-    uint32_t unique_queue_indices = get_unique_device_queues(queue_indices, sizeof(queue_indices) / sizeof(*queue_indices));
+    uint32_t n_unique_indices = get_unique_device_queues(queue_indices, sizeof(queue_indices) / sizeof(*queue_indices));
 
-    VkDeviceQueueCreateInfo *dev_queue_create_infos = malloc(unique_queue_indices * sizeof(*dev_queue_create_infos));
+    VkDeviceQueueCreateInfo *dev_queue_create_infos = malloc(n_unique_indices * sizeof(*dev_queue_create_infos));
     if (!dev_queue_create_infos)
-        return result;
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-    for (int32_t i = 0; i < unique_queue_indices; i++)
+    for (int32_t i = 0; i < n_unique_indices; i++)
     {
         dev_queue_create_infos[i] = (VkDeviceQueueCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -227,7 +230,7 @@ static VkResult create_logical_device(VulkanRenderer *vk_renderer)
 
     const VkDeviceCreateInfo device_create_info = {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .queueCreateInfoCount = unique_queue_indices,
+            .queueCreateInfoCount = n_unique_indices,
             .pQueueCreateInfos = dev_queue_create_infos,
             .enabledExtensionCount = sizeof(DEVICE_EXTENSIONS) / sizeof(*DEVICE_EXTENSIONS),
             .ppEnabledExtensionNames = DEVICE_EXTENSIONS,
@@ -237,12 +240,11 @@ static VkResult create_logical_device(VulkanRenderer *vk_renderer)
 
     free(dev_queue_create_infos);
 
-    if (result != VK_SUCCESS)
+    if (result == VK_SUCCESS)
         return result;
 
     vkGetDeviceQueue(vk_renderer->logical_device, vk_renderer->graphics_family.index, 0,
                      &vk_renderer->graphics_family.queue);
-
     vkGetDeviceQueue(vk_renderer->logical_device, vk_renderer->presentation_family.index, 0,
                      &vk_renderer->presentation_family.queue);
 
@@ -251,6 +253,7 @@ static VkResult create_logical_device(VulkanRenderer *vk_renderer)
 
 static VkResult create_swapchain(VulkanRenderer *vk_renderer)
 {
+    VkResult result;
     VkPhysicalDevice physical_device = vk_renderer->physical_device;
     VkSurfaceKHR surface = vk_renderer->surface;
 
@@ -289,11 +292,9 @@ static VkResult create_swapchain(VulkanRenderer *vk_renderer)
     free(present_modes);
 
     uint32_t image_count = surface_capabilities.minImageCount + 1;
-    if (surface_capabilities.minImageCount > 0)
+    if (surface_capabilities.maxImageCount > 0 && image_count > surface_capabilities.maxImageCount)
     {
-        image_count = surface_capabilities.maxImageCount < image_count
-                      ? surface_capabilities.minImageCount
-                      : image_count;
+        image_count = surface_capabilities.maxImageCount;
     }
 
     uint32_t queue_family_indices[] = {
@@ -324,7 +325,61 @@ static VkResult create_swapchain(VulkanRenderer *vk_renderer)
             .oldSwapchain = VK_NULL_HANDLE,
     };
 
-    return vkCreateSwapchainKHR(vk_renderer->logical_device, &swapchain_create_info, NULL, &vk_renderer->swapchain);
+    result = vkCreateSwapchainKHR(vk_renderer->logical_device, &swapchain_create_info, NULL, &vk_renderer->swapchain);
+    if (result != VK_SUCCESS)
+        return result;
+
+    vkGetSwapchainImagesKHR(vk_renderer->logical_device, vk_renderer->swapchain,
+                            &vk_renderer->swapchain_image_count, NULL);
+
+    VkImage *images = malloc(vk_renderer->swapchain_image_count * sizeof(VkImage));
+    if (!images)
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+    // free in VulkanRenderer_destroy
+    vk_renderer->swapchain_images = malloc(vk_renderer->swapchain_image_count * sizeof(*vk_renderer->swapchain_images));
+    if (!vk_renderer->swapchain_images)
+    {
+        free(images);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    vkGetSwapchainImagesKHR(vk_renderer->logical_device, vk_renderer->swapchain,
+                            &vk_renderer->swapchain_image_count, images);
+
+    for (int32_t i = 0; i < vk_renderer->swapchain_image_count; i++)
+    {
+        vk_renderer->swapchain_images[i].image = images[i];
+        VkImageViewCreateInfo image_view_create_info = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .image = images[i],
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = vk_renderer->swapchain_info.surface_format.format,
+                .components = {
+                        .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                },
+                .subresourceRange = {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                },
+        };
+        result = vkCreateImageView(vk_renderer->logical_device, &image_view_create_info, NULL,
+                                   &vk_renderer->swapchain_images[i].image_view);
+        if (result != VK_SUCCESS)
+        {
+            free(vk_renderer->swapchain_images);
+            break;
+        }
+    }
+
+    free(images);
+    return result;
 }
 
 static VkResult get_physical_device(VulkanRenderer *vk_renderer)
@@ -404,8 +459,7 @@ static size_t get_unique_device_queues(uint32_t queue_indices[], size_t queue_in
     {
         bool is_unique = true;
 
-        int32_t j = 0;
-        for (; j < unique_elements; j++)
+        for (int32_t j = 0; j < unique_elements; j++)
         {
             if (queue_indices[i] == queue_indices[j])
             {
@@ -416,7 +470,7 @@ static size_t get_unique_device_queues(uint32_t queue_indices[], size_t queue_in
 
         if (is_unique)
         {
-            queue_indices[j] = queue_indices[i];
+            queue_indices[unique_elements] = queue_indices[i];
             unique_elements++;
         }
     }
@@ -514,6 +568,7 @@ static VkResult check_physical_device_suitable(VkPhysicalDevice physical_device,
 
 static VkResult check_physical_device_queue_support(VkPhysicalDevice physical_device, VkSurfaceKHR surface)
 {
+
     uint32_t queue_family_count;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, NULL);
 
@@ -526,6 +581,7 @@ static VkResult check_physical_device_queue_support(VkPhysicalDevice physical_de
     int32_t graphics_family_index = -1;
     int32_t presentation_family_index = -1;
 
+    VkResult result = VK_ERROR_FEATURE_NOT_PRESENT;
     for (int32_t i = 0; i < queue_family_count; i++)
     {
         if (queue_family_props[i].queueCount <= 0)
@@ -547,13 +603,13 @@ static VkResult check_physical_device_queue_support(VkPhysicalDevice physical_de
 
         if (graphics_family_index >= 0 && presentation_family_index >= 0)
         {
-            free(queue_family_props);
-            return VK_SUCCESS;
+            result = VK_SUCCESS;
+            break;
         }
     }
 
     free(queue_family_props);
-    return VK_ERROR_FEATURE_NOT_PRESENT;
+    return result;
 }
 
 static VkResult check_physical_device_swapchain_support(VkPhysicalDevice physical_device, VkSurfaceKHR surface)
@@ -600,8 +656,8 @@ static VkSurfaceFormatKHR optimal_surface_format(VkSurfaceFormatKHR surface_form
 
     for (int32_t i = 0; i < surface_format_count; i++)
     {
-        if (surface_formats[i].format == VK_FORMAT_R8G8B8A8_UNORM &&
-            surface_formats[i].colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR)
+        if (surface_formats[i].format == VK_FORMAT_R8G8B8A8_UNORM
+        && surface_formats[i].colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR)
             return surface_formats[i];
     }
 
@@ -628,13 +684,13 @@ static VkExtent2D optimal_swapchain_extent(VkSurfaceCapabilitiesKHR surface_capa
         return surface_capabilities.currentExtent;
     }
 
-    int w, h;
+    int32_t w, h;
     glfwGetFramebufferSize(window, &w, &h);
 
     // clamp width and height to max and min extents
     uint32_t width, height;
-    width = clamp(w, surface_capabilities.minImageExtent.width, surface_capabilities.minImageExtent.width);
-    height = clamp(h, surface_capabilities.minImageExtent.height, surface_capabilities.minImageExtent.height);
+    width = H_CLAMP(w, surface_capabilities.minImageExtent.width, surface_capabilities.minImageExtent.width);
+    height = H_CLAMP(h, surface_capabilities.minImageExtent.height, surface_capabilities.minImageExtent.height);
 
     return (VkExtent2D) {
             .width = width,
@@ -642,7 +698,7 @@ static VkExtent2D optimal_swapchain_extent(VkSurfaceCapabilitiesKHR surface_capa
     };
 }
 
-static VkBool32 VKAPI_CALL debug_callback(
+static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
         VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
         VkDebugUtilsMessageTypeFlagsEXT message_type,
         const VkDebugUtilsMessengerCallbackDataEXT *callback_data,

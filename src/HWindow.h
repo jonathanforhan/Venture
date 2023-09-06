@@ -2,7 +2,7 @@
 #define HYDROGEN_SRC_HWINDOW_H
 #include <stdbool.h>
 #include <stdint.h>
-#include "Api.h"
+#include "HApi.h"
 #include "HResult.h"
 
 H_BEGIN

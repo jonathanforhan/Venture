@@ -34,7 +34,7 @@ VulkanWindow_create(VulkanWindow *vulkan_window, int32_t width, int32_t height, 
     return HResult_OK;
 }
 
-void VulkanWindow_destroy(VulkanWindow *restrict vulkan_window)
+void VulkanWindow_destroy(VulkanWindow *vulkan_window)
 {
     glfwDestroyWindow(vulkan_window->glfw_window);
     glfwTerminate();

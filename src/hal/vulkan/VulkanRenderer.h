@@ -1,6 +1,6 @@
 #ifndef HYDROGEN_SRC_HAL_VULKAN_VULKANRENDERER_H
 #define HYDROGEN_SRC_HAL_VULKAN_VULKANRENDERER_H
-#include "Api.h"
+#include "HApi.h"
 #include "VulkanWindow.h"
 #include "HResult.h"
 
@@ -14,6 +14,7 @@ typedef struct VulkanRenderer
     VkInstance instance;
     VkPhysicalDevice physical_device;
     VkDevice logical_device;
+
     struct {
         int32_t index;
         VkQueue queue;
@@ -22,7 +23,9 @@ typedef struct VulkanRenderer
         int32_t index;
         VkQueue queue;
     } presentation_family;
+
     VkSurfaceKHR surface;
+
     struct {
         VkSurfaceFormatKHR surface_format;
         VkPresentModeKHR present_mode;
@@ -30,6 +33,11 @@ typedef struct VulkanRenderer
     } swapchain_info;
     VkSwapchainKHR swapchain;
 
+    uint32_t swapchain_image_count;
+    struct {
+        VkImage image;
+        VkImageView image_view;
+    } *swapchain_images;
 } VulkanRenderer;
 
 HResult VulkanRenderer_create(VulkanRenderer *vk_renderer, VulkanWindow *vk_window);

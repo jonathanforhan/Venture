@@ -1,6 +1,6 @@
 #ifndef HYDROGEN_SRC_HRENDERER_H
 #define HYDROGEN_SRC_HRENDERER_H
-#include "Api.h"
+#include "HApi.h"
 #include "HWindow.h"
 #include "HResult.h"
 

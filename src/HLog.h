@@ -1,6 +1,6 @@
 #ifndef HYDROGEN_SRC_UTIL_LOG_H
 #define HYDROGEN_SRC_UTIL_LOG_H
-#include "Api.h"
+#include "HApi.h"
 #include <stdio.h>
 
 H_BEGIN
